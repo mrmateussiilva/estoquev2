@@ -1,12 +1,13 @@
 import streamlit as st
-import pandas as pd
+import model
+from materiais import PAPEIS, TINTAS, TECIDOS
 import json
-import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.express as px
 
-# Arquivo para armazenar o estoque
-ESTOQUE_FILE = "estoque.json"
+ESTOQUE_FILE = "db.json"
 
-# Função para carregar o estoque
+
 def carregar_estoque():
     try:
         with open(ESTOQUE_FILE, "r") as f:
@@ -14,82 +15,94 @@ def carregar_estoque():
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
-# Função para salvar o estoque
+
 def salvar_estoque(estoque):
     with open(ESTOQUE_FILE, "w") as f:
         json.dump(estoque, f, indent=4)
 
-# Carregar estoque ao iniciar
-estoque = carregar_estoque()
 
+estoque = carregar_estoque()
 st.title("📦 Controle de Estoque")
+
+# Criar abas para cada tipo de material
+abas = st.tabs(["📜 Papéis", "🎨 Tintas", "🧵 Tecidos"])
+
+# Criar dataframes separados para cada categoria
+df_papel = pd.DataFrame(estoque.get("papeis", []))
+df_tinta = pd.DataFrame(estoque.get("tintas", []))
+df_tecido = pd.DataFrame(estoque.get("tecidos", []))
+
+# Aba de Papéis
+with abas[0]:
+    st.subheader("📜 Estoque de Papéis")
+    if not df_papel.empty:
+        st.table(df_papel)
+    else:
+        st.warning("Ainda não há papéis no estoque.")
+
+# Aba de Tintas
+with abas[1]:
+    st.subheader("🎨 Estoque de Tintas")
+    if not df_papel.empty:
+        st.table(df_tinta)
+    else:
+        st.warning("Ainda não há tintas no estoque.")
+
+# Aba de Tecidos
+with abas[2]:
+    st.subheader("🧵 Estoque de Tecidos")
+    if not df_papel.empty:
+        st.table(df_tecido)
+    else:
+        st.warning("Ainda não há tecidos no estoque.")
 
 # Barra lateral para adicionar produto
 with st.sidebar:
     st.subheader("Adicionar Produto")
-    categoria = st.selectbox("Categoria do Produto", ["Papel", "Tinta", "Outros"])
-    
+    categoria = st.selectbox("Categoria do Produto", [
+                             "Papel", "Tinta", "Tecido"])
+
     if categoria == "Papel":
-        nome = st.text_input("Nome do Papel")
-        gramatura = st.text_input("Gramatura (g/m²)")
-        unidade = "metros"
-        quantidade = st.number_input("Quantidade (metros)", min_value=0.0, step=0.1, format="%.2f")
+        nome = st.selectbox("Tipo do Papel", PAPEIS)
+        qtd_unit = st.number_input("Quantidade de rolos:", step=1, min_value=1)
+        qtd_rolo = st.number_input("Metros Por Rolo", min_value=50, step=50)
+        d = {"name": nome, "quantity": qtd_unit, "metros": qtd_rolo*qtd_unit}
+
     elif categoria == "Tinta":
-        nome = st.text_input("Nome da Tinta")
-        cor = st.text_input("Cor da Tinta")
-        unidade = "litros"
-        quantidade = st.number_input("Quantidade (litros)", min_value=0.0, step=0.1, format="%.2f")
-    else:
-        nome = st.text_input("Nome do Produto")
-        unidade = st.text_input("Unidade de Medida (ex: unidades, metros, litros)")
-        quantidade = st.number_input("Quantidade Inicial", min_value=0.0, step=0.1, format="%.2f")
-    
-    alerta = st.number_input("Nível de alerta", min_value=0.0, step=0.1, format="%.2f")
-    
+        cor = st.selectbox("Cor da Tinta:", TINTAS)
+        tipo = st.selectbox("Tipo da Tinta:", ("Sublimação", "Solvente"))
+        qtd_litro = st.number_input(
+            "Quantidade por litro:", step=1, min_value=1)
+        qtd_unit = st.number_input(
+            "Quantidade de litros:", min_value=1, step=1)
+        d = {"color": cor, "quantity": qtd_unit,
+            "type": tipo, "litros_total": qtd_litro*qtd_unit}
+
+    elif categoria == "Tecido":
+        nome = st.selectbox("Nome do Tecido", TECIDOS)
+        qtd_metro = st.number_input("Quantiade de metros", step=1, min_value=1)
+        qtd_unit = st.number_input("Quantidade de rolos:", min_value=1, step=1)
+        d = {"name": nome, "quantity": qtd_unit, "metros": qtd_metro*qtd_unit}
+
     if st.button("Adicionar Produto"):
-        if nome:
-            estoque[nome] = {"quantidade": quantidade, "unidade": unidade, "alerta": alerta, "categoria": categoria}
-            salvar_estoque(estoque)
-            st.success(f"{nome} adicionado com sucesso!")
-            st.experimental_rerun()
-        else:
-            st.warning("Preencha todos os campos!")
+        if categoria == "Papel":
+            if model.insert_papel(d) is not None:
+                st.success(f"Produto {d['name']} cadastro com sucesso!")     
+            else:
+                st.warning("Erro ao salvo o produto!")
+                
+                
+        if categoria == "Tinta":
+            if model.insert_tinta(d) is not None:
+                st.success(f"Produto {d['color']} cadastro com sucesso!")     
+            else:
+                st.warning("Erro ao salvo o produto!")
+        if categoria == "Tecido":
+            if model.insert_tecido(d) is not None:
+                st.success(f"Produto {d['name']} cadastro com sucesso!")     
+            else:
+                st.warning("Erro ao salvo o produto!")
+
+            
 
 # Home com gráficos
-st.subheader("📊 Visão Geral do Estoque")
-if estoque:
-    df = pd.DataFrame.from_dict(estoque, orient="index")
-    
-    # Gráfico de barras do estoque
-    fig, ax = plt.subplots()
-    ax.bar(df.index, df["quantidade"], color='blue')
-    ax.set_ylabel("Quantidade")
-    ax.set_xlabel("Produtos")
-    ax.set_title("Estoque Atual")
-    plt.xticks(rotation=45, ha='right')
-    
-    st.pyplot(fig)
-    st.dataframe(df)
-else:
-    st.info("Nenhum produto no estoque.")
-
-# Registrar saída de produto
-st.subheader("📉 Registrar Saída")
-produto_selecionado = st.selectbox("Escolha o produto", list(estoque.keys()))
-quantidade_saida = st.number_input("Quantidade a remover", min_value=0.0, step=0.1, format="%.2f")
-
-if st.button("Registrar Saída"):
-    if produto_selecionado in estoque:
-        estoque[produto_selecionado]["quantidade"] -= quantidade_saida
-        salvar_estoque(estoque)
-        st.success(f"{quantidade_saida} {estoque[produto_selecionado]['unidade']} removidos de {produto_selecionado}.")
-        st.experimental_rerun()
-
-# Alertas de estoque baixo
-st.subheader("⚠️ Alertas de Estoque Baixo")
-alertas = {p: d for p, d in estoque.items() if d["quantidade"] <= d["alerta"]}
-if alertas:
-    for produto, dados in alertas.items():
-        st.warning(f"{produto} está abaixo do nível de alerta! Restam {dados['quantidade']} {dados['unidade']}")
-else:
-    st.success("Todos os produtos estão acima do nível de alerta.")
