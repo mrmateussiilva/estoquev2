@@ -3,7 +3,6 @@ import model
 from materiais import PAPEIS, TINTAS, TECIDOS
 import json
 import pandas as pd
-import plotly.express as px
 
 ESTOQUE_FILE = "db.json"
 
